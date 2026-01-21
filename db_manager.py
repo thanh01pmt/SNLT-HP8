@@ -2,13 +2,9 @@
 # File: db_manager.py
 # Dự án: SNLT-HP8-B7-ProjectBasic
 # -------------------------------------------------------------------
-
 import sqlite3
 import os
 import sys
-
-# Giả sử file models.py đã được tạo ở các bài trước
-# from models import Question 
 
 DB_NAME = "brain_quest.db"
 
@@ -22,31 +18,34 @@ def resource_path_db(relative_path):
 class DatabaseManager:
     def __init__(self, db_name=resource_path_db(DB_NAME)):
         self.db_name = db_name
-        self._create_tables()
+        self._create_or_update_tables()
 
     def _get_connection(self):
         conn = sqlite3.connect(self.db_name)
-        ### CODE BÀI 7: BẬT HỖ TRỢ KHÓA NGOẠI ###
         conn.execute("PRAGMA foreign_keys = ON")
-        ### KẾT THÚC CODE BÀI 7 ###
         return conn
 
-    def _create_tables(self):
+    def _create_or_update_tables(self):
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
-            # Bảng questions giữ nguyên từ các bài trước
+            # Bảng questions
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS questions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     question_text TEXT NOT NULL,
                     options_text TEXT NOT NULL,
-                    correct_answer_text TEXT NOT NULL
-                    -- Các cột khác như explanation, category có thể thêm ở đây
+                    correct_answer_text TEXT NOT NULL,
+                    explanation TEXT
                 )
             ''')
-            
-            ### CODE BÀI 7: THÊM BẢNG USERS VÀ SCORES ###
+            # Kiểm tra và thêm cột explanation nếu chưa có
+            cursor.execute("PRAGMA table_info(questions)")
+            columns = [info[1] for info in cursor.fetchall()]
+            if 'explanation' not in columns:
+                cursor.execute("ALTER TABLE questions ADD COLUMN explanation TEXT")
+
+            # Bảng users
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS users (
                     user_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -54,6 +53,7 @@ class DatabaseManager:
                 )
             ''')
             
+            # Bảng scores
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS scores (
                     score_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,35 +63,61 @@ class DatabaseManager:
                     FOREIGN KEY(user_id) REFERENCES users(user_id) ON DELETE CASCADE
                 )
             ''')
-            ### KẾT THÚC CODE BÀI 7 ###
             conn.commit()
         except sqlite3.Error as e:
-            print(f"Lỗi khi tạo bảng: {e}")
+            print(f"Lỗi khi tạo/cập nhật bảng: {e}")
         finally:
             conn.close()
 
-    # --- Question Methods (Giữ nguyên) ---
-    def get_random_question(self):
-        # ... (code giữ nguyên từ các bài trước, trả về dictionary) ...
+    def get_random_questions(self, limit=5):
+        """Lấy một SỐ LƯỢNG câu hỏi ngẫu nhiên từ DB."""
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
-            cursor.execute("SELECT question_text, options_text, correct_answer_text FROM questions ORDER BY RANDOM() LIMIT 1")
-            row = cursor.fetchone()
-            if row:
-                q_text, opts_text, correct_ans = row
-                return { "question": q_text, "options": opts_text.split(';'), "correct_answer_text": correct_ans }
-            return None
+            cursor.execute("SELECT question_text, options_text, correct_answer_text, explanation FROM questions ORDER BY RANDOM() LIMIT ?", (limit,))
+            rows = cursor.fetchall()
+            questions_list = []
+            for row in rows:
+                q_text, opts_text, correct_ans, explanation = row
+                questions_list.append({
+                    "question": q_text,
+                    "options": opts_text.split(';'),
+                    "correct_answer_text": correct_ans,
+                    "explanation": explanation
+                })
+            return questions_list
         except sqlite3.Error as e:
-            print(f"Lỗi khi lấy câu hỏi ngẫu nhiên DB: {e}")
-            return None
+            print(f"Lỗi khi lấy nhiều câu hỏi ngẫu nhiên DB: {e}")
+            return []
         finally:
             if conn:
                 conn.close()
+    
+    def get_all_questions(self):
+        """Lấy TẤT CẢ câu hỏi cho chế độ ôn tập."""
+        conn = self._get_connection()
+        cursor = conn.cursor()
+        try:
+            sql = "SELECT question_text, options_text, correct_answer_text, explanation FROM questions ORDER BY id"
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            questions_list = []
+            for row in rows:
+                q_text, opts_text, correct_ans, explanation = row
+                questions_list.append({
+                    "question": q_text,
+                    "options": opts_text.split(';'),
+                    "correct_answer_text": correct_ans,
+                    "explanation": explanation
+                })
+            return questions_list
+        except sqlite3.Error as e:
+            print(f"Lỗi khi lấy tất cả câu hỏi: {e}")
+            return []
+        finally:
+            conn.close()
 
-    ### CODE BÀI 7: THÊM CÁC HÀM XỬ LÝ USER VÀ SCORE ###
     def add_or_get_user(self, username):
-        """Thêm user mới nếu chưa có, hoặc lấy user_id nếu đã có. Trả về user_id."""
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
@@ -110,7 +136,6 @@ class DatabaseManager:
             conn.close()
 
     def add_score(self, user_id, score_value):
-        """Thêm một dòng điểm mới vào bảng scores."""
         if user_id is None:
             print("Lỗi: Không thể lưu điểm vì user_id là None.")
             return False
@@ -127,7 +152,6 @@ class DatabaseManager:
             conn.close()
 
     def get_top_scores(self, limit=10):
-        """Lấy top N điểm cao nhất, nối bảng để lấy username."""
         conn = self._get_connection()
         cursor = conn.cursor()
         try:
@@ -144,4 +168,3 @@ class DatabaseManager:
             return []
         finally:
             conn.close()
-    ### KẾT THÚC CODE BÀI 7 ###
