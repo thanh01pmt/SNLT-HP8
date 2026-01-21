@@ -1,6 +1,6 @@
 # -------------------------------------------------------------------
 # File: main_app.py
-# Dự án: SNLT-HP8-B7-ProjectBasic
+# Dự án: SNLT-HP8-B8-ProjectBasic
 # -------------------------------------------------------------------
 
 import tkinter as tk
@@ -27,12 +27,12 @@ def resource_path(relative_path):
 DB_PATH = resource_path("brain_quest.db")
 OPENTDB_API_URL = "https://opentdb.com/api.php"
 
-class QuizAppWithLeaderboard(tk.Tk):
+class QuizAppWithLearningFeatures(tk.Tk):
     def __init__(self):
         super().__init__()
         
-        self.title("SNLT-HP8-B7-ProjectBasic (Bảng Xếp Hạng)")
-        self.geometry("700x550")
+        self.title("SNLT-HP8-B8-ProjectBasic (Học tập Nâng cao)")
+        self.geometry("700x600")
         self.resizable(False, False)
         
         self.db_manager = DatabaseManager()
@@ -40,7 +40,8 @@ class QuizAppWithLeaderboard(tk.Tk):
         
         self.player_label = None; self.score_label = None
         self.question_label = None; self.option_buttons = []
-        self.result_feedback_label = None; self.next_button = None
+        self.result_feedback_label = None; self.game_explanation_label = None
+        self.next_button = None
         
         self.current_player_name = None; self.current_player_id = None
         self.current_score = 0; self.current_question_data = None
@@ -49,6 +50,8 @@ class QuizAppWithLeaderboard(tk.Tk):
         self.api_questions_result = None; self.api_thread_running = False
         
         self.questions_to_play = []; self.current_question_index = -1
+        
+        self.review_questions = []; self.current_review_index = -1
         
         self._setup_main_menu()
         self._show_welcome_screen()
@@ -61,6 +64,11 @@ class QuizAppWithLeaderboard(tk.Tk):
         game_menu.add_command(label="Chơi Mới", command=self.start_new_game_flow)
         game_menu.add_separator()
         game_menu.add_command(label="Bảng Xếp Hạng", command=self.show_leaderboard_window)
+        
+        learning_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Học tập", menu=learning_menu)
+        learning_menu.add_command(label="Chế độ Ôn tập", command=self.start_review_mode)
+        
         game_menu.add_separator()
         game_menu.add_command(label="Thoát", command=self.quit)
 
@@ -104,17 +112,16 @@ class QuizAppWithLeaderboard(tk.Tk):
         self.questions_to_play = self.db_manager.get_random_questions(limit=num_questions)
         if not self.questions_to_play:
             messagebox.showinfo("Thông báo", "Không có đủ câu hỏi trong CSDL.", parent=self)
-            self._show_welcome_screen()
-            return
+            self._show_welcome_screen(); return
         self.current_question_index = -1
         self.initiate_game_screen()
         self._handle_next_question_logic()
-    
+
     def initiate_game_screen_from_api(self, num_questions=5):
         self.current_question_is_from_api = True
         self.initiate_game_screen()
         self._load_and_display_question_from_api_set(amount=num_questions)
-
+    
     def initiate_game_screen(self):
         self._clear_main_window()
         self.current_score = 0
@@ -135,6 +142,8 @@ class QuizAppWithLeaderboard(tk.Tk):
             self.option_buttons.append(btn)
         self.result_feedback_label = ttk.Label(game_frame, text="", font=("Arial", 12, "italic"))
         self.result_feedback_label.pack(pady=5)
+        self.game_explanation_label = ttk.Label(game_frame, text="", font=("Arial", 11, "italic"), wraplength=680, justify="left")
+        self.game_explanation_label.pack(pady=5)
         controls_frame = ttk.Frame(game_frame); controls_frame.pack(pady=15, side=tk.BOTTOM)
         self.next_button = ttk.Button(controls_frame, text="Câu Tiếp Theo", command=self._handle_next_question_logic, state=tk.DISABLED)
         self.next_button.pack(side=tk.LEFT, padx=10)
@@ -262,9 +271,75 @@ class QuizAppWithLeaderboard(tk.Tk):
                 self.result_feedback_label.config(text=f"Sai rồi! Đáp án đúng là: {correct_answer_text}", foreground="red")
                 self.sound_manager.play_wrong()
             self.score_label.config(text=f"Điểm: {self.current_score}")
+            if q_data.get("explanation"):
+                self.game_explanation_label.config(text=f"Giải thích: {q_data['explanation']}")
             self.next_button.config(state=tk.NORMAL)
+    
+    def start_review_mode(self):
+        self.sound_manager.play_click()
+        self.review_questions = self.db_manager.get_all_questions()
+        if not self.review_questions:
+            messagebox.showinfo("Thông báo", "Không có câu hỏi nào để ôn tập.", parent=self)
+            return
+        self.current_review_index = -1
+        self._create_review_window()
+        self._display_next_review_question()
+
+    def _create_review_window(self):
+        self.review_window = tk.Toplevel(self)
+        self.review_window.title("Chế độ Ôn tập")
+        self.review_window.geometry("700x550")
+        self.review_window.transient(self); self.review_window.grab_set()
+        
+        self.review_q_label = ttk.Label(self.review_window, text="", font=("Arial", 16, "bold"), wraplength=650, justify="center")
+        self.review_q_label.pack(pady=20)
+        self.review_a_label = ttk.Label(self.review_window, text="", font=("Arial", 14, "bold"), wraplength=650, justify="center", foreground="darkcyan")
+        self.review_a_label.pack(pady=10)
+        self.review_exp_label = ttk.Label(self.review_window, text="", font=("Arial", 12, "italic"), wraplength=650, justify="left")
+        self.review_exp_label.pack(pady=10)
+        
+        control_frame = ttk.Frame(self.review_window)
+        control_frame.pack(pady=20, side=tk.BOTTOM)
+        self.prev_btn = ttk.Button(control_frame, text="<< Câu Trước", command=self._display_prev_review_question)
+        self.prev_btn.pack(side=tk.LEFT, padx=10)
+        self.toggle_answer_btn = ttk.Button(control_frame, text="Hiện Đáp Án", command=self._toggle_review_answer)
+        self.toggle_answer_btn.pack(side=tk.LEFT, padx=10)
+        self.next_btn = ttk.Button(control_frame, text="Câu Tiếp Theo >>", command=self._display_next_review_question)
+        self.next_btn.pack(side=tk.LEFT, padx=10)
+
+    def _update_review_question_display(self):
+        if 0 <= self.current_review_index < len(self.review_questions):
+            q_data = self.review_questions[self.current_review_index]
+            self.review_q_label.config(text=f"Câu {self.current_review_index + 1}: {q_data['question']}")
+            self.review_a_label.config(text=""); self.review_exp_label.config(text="")
+            self.toggle_answer_btn.config(text="Hiện Đáp Án")
+            self.prev_btn.config(state=tk.NORMAL if self.current_review_index > 0 else tk.DISABLED)
+            self.next_btn.config(state=tk.NORMAL if self.current_review_index < len(self.review_questions) - 1 else tk.DISABLED)
+        
+    def _display_next_review_question(self):
+        if self.current_review_index < len(self.review_questions) - 1:
+            self.sound_manager.play_click(); self.current_review_index += 1
+            self._update_review_question_display()
+    
+    def _display_prev_review_question(self):
+        if self.current_review_index > 0:
+            self.sound_manager.play_click(); self.current_review_index -= 1
+            self._update_review_question_display()
+
+    def _toggle_review_answer(self):
+        self.sound_manager.play_click()
+        if 0 <= self.current_review_index < len(self.review_questions):
+            q_data = self.review_questions[self.current_review_index]
+            if not self.review_a_label.cget("text"):
+                self.review_a_label.config(text=f"Đáp án: {q_data['correct_answer_text']}")
+                if q_data["explanation"]:
+                    self.review_exp_label.config(text=f"Giải thích: {q_data['explanation']}")
+                self.toggle_answer_btn.config(text="Ẩn Đáp Án")
+            else:
+                self.review_a_label.config(text=""); self.review_exp_label.config(text="")
+                self.toggle_answer_btn.config(text="Hiện Đáp Án")
 
 if __name__ == "__main__":
     db_initializer = DatabaseManager()
-    app = QuizAppWithLeaderboard()
+    app = QuizAppWithLearningFeatures()
     app.mainloop()

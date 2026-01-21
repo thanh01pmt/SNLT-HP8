@@ -1,6 +1,6 @@
 # -------------------------------------------------------------------
 # File: db_manager.py
-# Dự án: SNLT-HP8-B7-ProjectBasic
+# Dự án: SNLT-HP8-B8-ProjectBasic
 # -------------------------------------------------------------------
 import sqlite3
 import os
@@ -67,7 +67,8 @@ class DatabaseManager:
         except sqlite3.Error as e:
             print(f"Lỗi khi tạo/cập nhật bảng: {e}")
         finally:
-            conn.close()
+            if conn:
+                conn.close()
 
     def get_random_questions(self, limit=5):
         """Lấy một SỐ LƯỢNG câu hỏi ngẫu nhiên từ DB."""
@@ -133,7 +134,8 @@ class DatabaseManager:
             print(f"Lỗi khi xử lý user: {e}")
             return None
         finally:
-            conn.close()
+            if conn:
+                conn.close()
 
     def add_score(self, user_id, score_value):
         if user_id is None:
@@ -149,7 +151,8 @@ class DatabaseManager:
             print(f"Lỗi khi thêm điểm: {e}")
             return False
         finally:
-            conn.close()
+            if conn:
+                conn.close()
 
     def get_top_scores(self, limit=10):
         conn = self._get_connection()
@@ -167,4 +170,5 @@ class DatabaseManager:
             print(f"Lỗi khi lấy top scores: {e}")
             return []
         finally:
-            conn.close()
+            if conn:
+                conn.close()
